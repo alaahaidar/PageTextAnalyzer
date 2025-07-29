@@ -54,17 +54,29 @@ class WebTextExtractor:
     # Tags to completely ignore (non-visible content)
     IGNORED_TAGS = ['script', 'style', 'meta', 'link', 'noscript', 'template']
     
-    # Enhanced Polish detection patterns
+    # Comprehensive Polish detection patterns
     POLISH_PATTERNS = {
-        # Common Polish words that appear frequently
+        # Extensive Polish words database
         'common_words': [
+            # Basic words
             'aby', 'ale', 'albo', 'jako', 'oraz', 'tylko', 'także', 'bardzo', 
             'można', 'należy', 'przez', 'gdzie', 'które', 'które', 'wszystkich',
             'zostać', 'będzie', 'został', 'została', 'zostało', 'zostały',
             'może', 'mogą', 'musi', 'musisz', 'powinien', 'powinna', 'powinno',
             'więc', 'więcej', 'podczas', 'między', 'wiele', 'każdy', 'każda',
             'jakie', 'jaki', 'jaka', 'tutaj', 'teraz', 'wtedy', 'nigdy',
-            'zawsze', 'często', 'czasem', 'czasami', 'dziś', 'dzisiaj'
+            'zawsze', 'często', 'czasem', 'czasami', 'dziś', 'dzisiaj',
+            # Action words frequently seen
+            'poznaj', 'kup', 'kupuj', 'stworzony', 'dla', 'spersonalizuj',
+            'modele', 'model', 'wybierz', 'sprawdź', 'zobacz', 'odkryj',
+            'znajdź', 'dowiedz', 'się', 'więcej', 'informacji', 'produkty',
+            'usługi', 'sklep', 'wsparcie', 'pomoc', 'kontakt', 'firma',
+            'biznes', 'biznesu', 'rozrywka', 'aplikacje', 'gry', 'muzyka',
+            'filmy', 'książki', 'portfel', 'płatności', 'bezpieczeństwo',
+            # Polish tech/Apple terms
+            'aparat', 'zdjęcia', 'wideo', 'nagrywanie', 'odtwarzanie',
+            'wyświetlacz', 'ekran', 'bateria', 'ładowanie', 'pamięć',
+            'procesor', 'kamera', 'mikrofon', 'głośnik', 'słuchawki'
         ],
         
         # Polish-specific character combinations
@@ -73,10 +85,17 @@ class WebTextExtractor:
             'cz', 'sz', 'rz', 'dz', 'dż', 'dź',  # Polish digraphs
         ],
         
-        # Common Polish endings
+        # Comprehensive Polish endings
         'endings': [
-            'ość', 'ość', 'anie', 'enie', 'owy', 'owa', 'owe', 'emy', 'ecie',
-            'ować', 'ąć', 'nąć', 'ić', 'yć', 'ych', 'ymi', 'ami', 'ach'
+            'ość', 'anie', 'enie', 'owy', 'owa', 'owe', 'emy', 'ecie',
+            'ować', 'ąć', 'nąć', 'ić', 'yć', 'ych', 'ymi', 'ami', 'ach',
+            'iej', 'iego', 'ych', 'ymi', 'ę', 'ą', 'em', 'ie', 'ów',
+            'uj', 'esz', 'isz', 'asz', 'uje', 'uję', 'iesz'
+        ],
+        
+        # Polish possessive and genitive patterns
+        'possessive_patterns': [
+            "'a", "'em", "'ie", "'y", "'ę", "'ą"  # iPhone'a, Apple'a etc
         ]
     }
     
@@ -141,61 +160,73 @@ class WebTextExtractor:
         return text
     
     def is_polish_text(self, text: str) -> bool:
-        """Enhanced Polish text detection using multiple strategies."""
-        if not text or len(text.strip()) < 5:
+        """Ultra-aggressive Polish text detection for maximum accuracy."""
+        if not text or len(text.strip()) < 3:
             return False
         
-        text_lower = text.lower()
+        text_lower = text.lower().strip()
         words = text_lower.split()
         
-        # Strategy 1: Check for Polish diacritics (strong indicator)
+        # Strategy 1: Polish diacritics (any Polish character = Polish text)
         polish_chars = sum(1 for char in text if char in 'ąćęłńóśźż')
         if polish_chars > 0:
-            # If we have Polish characters, likely Polish
-            if len(text) < 50:  # Short text with Polish chars is likely Polish
-                return True
-            elif polish_chars / len(text) > 0.02:  # More than 2% Polish chars
+            return True
+        
+        # Strategy 2: Polish possessive patterns (iPhone'a, Apple'a etc)
+        for pattern in self.POLISH_PATTERNS['possessive_patterns']:
+            if pattern in text_lower:
                 return True
         
-        # Strategy 2: Check for common Polish words
-        polish_word_count = sum(1 for word in words if word in self.POLISH_PATTERNS['common_words'])
+        # Strategy 3: Exact Polish word matches (much more aggressive)
+        polish_word_count = 0
+        for word in words:
+            # Remove punctuation and check
+            clean_word = word.strip('.,!?;:"()[]{}')
+            if clean_word in self.POLISH_PATTERNS['common_words']:
+                polish_word_count += 1
+        
         if len(words) > 0:
             polish_word_ratio = polish_word_count / len(words)
-            if polish_word_ratio > 0.15:  # More than 15% Polish words
+            # Much lower threshold - even 1 Polish word in short text
+            if len(words) <= 3 and polish_word_count >= 1:  # Short phrases
+                return True
+            elif polish_word_ratio > 0.1:  # 10% threshold instead of 15%
                 return True
         
-        # Strategy 3: Check for Polish character combinations
+        # Strategy 4: Polish character combinations (more sensitive)
         polish_patterns = sum(1 for pattern in self.POLISH_PATTERNS['char_patterns'] 
                              if pattern in text_lower)
-        if polish_patterns >= 2:  # Multiple Polish patterns found
+        if polish_patterns >= 1:  # Even 1 pattern is enough
             return True
         
-        # Strategy 4: Check for Polish word endings
-        polish_endings = sum(1 for word in words 
-                           for ending in self.POLISH_PATTERNS['endings'] 
-                           if word.endswith(ending))
-        if len(words) > 0 and polish_endings / len(words) > 0.1:
+        # Strategy 5: Polish word endings (more aggressive)
+        polish_endings = 0
+        for word in words:
+            clean_word = word.strip('.,!?;:"()[]{}')
+            for ending in self.POLISH_PATTERNS['endings']:
+                if clean_word.endswith(ending):
+                    polish_endings += 1
+                    break
+        
+        if len(words) > 0 and polish_endings / len(words) > 0.05:  # 5% threshold
             return True
         
-        # Strategy 5: Use langdetect as backup, but be more strict
+        # Strategy 6: Single word Polish detection for very short text
+        if len(words) == 1:
+            clean_word = words[0].strip('.,!?;:"()[]{}')
+            if (clean_word in self.POLISH_PATTERNS['common_words'] or 
+                any(ending in clean_word for ending in self.POLISH_PATTERNS['endings']) or
+                any(pattern in clean_word for pattern in self.POLISH_PATTERNS['char_patterns'])):
+                return True
+        
+        # Strategy 7: Use langdetect ONLY if our patterns didn't catch it
         try:
-            if len(text.strip()) >= 15:  # Only for longer text
+            if len(text.strip()) >= 10:
                 detected_lang = detect(text)
                 if detected_lang == 'pl':
                     return True
         except:
             pass
-        
-        # Strategy 6: Use TextBlob as additional verification
-        try:
-            blob = TextBlob(text)
-            # TextBlob doesn't have detect_language method, skip this strategy
-            pass
-        except:
-            pass
-        
-        # OpenAI detection disabled to prevent quota error messages
-        # The 5-layer detection system already provides 91-93% accuracy
         
         return False
     
@@ -440,7 +471,7 @@ class WebTextExtractor:
         
         # Filter non-Polish content
         print("Detecting languages and filtering non-Polish content...")
-        print("Using enhanced 5-layer Polish detection system...")
+        print("Using ultra-aggressive 7-layer Polish detection system...")
         non_polish_elements = self.filter_non_polish(text_elements) 
         polish_filtered = len(text_elements) - len(non_polish_elements)
         print(f"Filtered out {polish_filtered} Polish text snippets")
