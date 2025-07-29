@@ -76,7 +76,13 @@ class WebTextExtractor:
             # Polish tech/Apple terms
             'aparat', 'zdjęcia', 'wideo', 'nagrywanie', 'odtwarzanie',
             'wyświetlacz', 'ekran', 'bateria', 'ładowanie', 'pamięć',
-            'procesor', 'kamera', 'mikrofon', 'głośnik', 'słuchawki'
+            'procesor', 'kamera', 'mikrofon', 'głośnik', 'słuchawki',
+            # Website/navigation terms that are clearly Polish
+            'mapa', 'witryny', 'stopka', 'akcesoria', 'aplikacja', 'apka',
+            'konto', 'konta', 'sklep', 'sklepu', 'portfel',
+            # More Polish words from the misclassified examples
+            'do', 'w', 'na', 'za', 'pod', 'nad', 'przy', 'bez', 'od', 'po',
+            'ze', 'we', 'przed', 'między', 'przez', 'według', 'podczas'
         ],
         
         # Polish-specific character combinations
@@ -96,6 +102,18 @@ class WebTextExtractor:
         # Polish possessive and genitive patterns
         'possessive_patterns': [
             "'a", "'em", "'ie", "'y", "'ę", "'ą"  # iPhone'a, Apple'a etc
+        ],
+        
+        # Polish phrases that are commonly misidentified
+        'polish_phrases': [
+            'mapa witryny',      # Was classified as Swahili 
+            'akcesoria do',      # Was classified as Portuguese
+            'stopka apple',      # Was classified as Slovenian
+            'aplikacja apple',   # Was classified as Slovenian
+            'konto w apple',     # Contains Polish preposition
+            'iphone i mac',      # Polish conjunction 'i'
+            'iphone i apple',    # Polish conjunction 'i'
+            'iphone i airpods'   # Polish conjunction 'i'
         ]
     }
     
@@ -177,6 +195,11 @@ class WebTextExtractor:
             if pattern in text_lower:
                 return True
         
+        # Strategy 2.5: Polish phrases that are commonly misidentified
+        for phrase in self.POLISH_PATTERNS['polish_phrases']:
+            if phrase in text_lower:
+                return True
+        
         # Strategy 3: Exact Polish word matches (much more aggressive)
         polish_word_count = 0
         for word in words:
@@ -217,6 +240,20 @@ class WebTextExtractor:
             if (clean_word in self.POLISH_PATTERNS['common_words'] or 
                 any(ending in clean_word for ending in self.POLISH_PATTERNS['endings']) or
                 any(pattern in clean_word for pattern in self.POLISH_PATTERNS['char_patterns'])):
+                return True
+        
+        # Strategy 6.5: Special Polish conjunction detection ('i' = and)
+        # Phrases like "iPhone i Mac", "iPhone i Apple" are clearly Polish
+        if ' i ' in text_lower and len(words) >= 3:
+            # Check if it's "X i Y" pattern where X and Y are brands/products
+            words_around_i = []
+            for i, word in enumerate(words):
+                if word == 'i' and i > 0 and i < len(words) - 1:
+                    words_around_i.extend([words[i-1], words[i+1]])
+            
+            # If we have brand names around 'i', it's likely Polish
+            brand_terms = ['iphone', 'apple', 'mac', 'airpods', 'watch', 'ipad', 'imac']
+            if any(term in ' '.join(words_around_i).lower() for term in brand_terms):
                 return True
         
         # Strategy 7: Use langdetect ONLY if our patterns didn't catch it
@@ -471,7 +508,7 @@ class WebTextExtractor:
         
         # Filter non-Polish content
         print("Detecting languages and filtering non-Polish content...")
-        print("Using ultra-aggressive 7-layer Polish detection system...")
+        print("Using ultra-aggressive 8-layer Polish detection system...")
         non_polish_elements = self.filter_non_polish(text_elements) 
         polish_filtered = len(text_elements) - len(non_polish_elements)
         print(f"Filtered out {polish_filtered} Polish text snippets")
