@@ -135,11 +135,8 @@ class WebTextExtractor:
             elements = soup.find_all(tag_name)
             
             for element in elements:
-                # Get direct text content (not from nested elements)
-                text_content = ""
-                for content in element.contents:
-                    if hasattr(content, 'strip'):  # Text node
-                        text_content += content
+                # Get the text content of the element (includes nested text)
+                text_content = element.get_text(separator=' ', strip=True)
                 
                 # Clean the extracted text
                 cleaned_text = self.clean_text(text_content)
