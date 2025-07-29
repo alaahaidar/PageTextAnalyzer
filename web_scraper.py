@@ -189,10 +189,8 @@ class WebTextExtractor:
         # Strategy 6: Use TextBlob as additional verification
         try:
             blob = TextBlob(text)
-            if hasattr(blob, 'detect_language'):
-                detected_lang = blob.detect_language()
-                if detected_lang == 'pl':
-                    return True
+            # TextBlob doesn't have detect_language method, skip this strategy
+            pass
         except:
             pass
         
@@ -215,12 +213,12 @@ class WebTextExtractor:
                     temperature=0
                 )
                 
-                ai_response = response.choices[0].message.content.strip().upper()
-                if ai_response == 'YES':
+                ai_response = response.choices[0].message.content
+                if ai_response and ai_response.strip().upper() == 'YES':
                     return True
             except Exception as e:
-                # If OpenAI fails, continue with other methods
-                print(f"OpenAI detection failed: {e}")
+                # If OpenAI fails, continue with other methods (silently to reduce console noise)
+                pass
         
         return False
     
@@ -243,13 +241,7 @@ class WebTextExtractor:
                 return None
                 
         except LangDetectException:
-            # If langdetect fails, try TextBlob as backup
-            try:
-                blob = TextBlob(text)
-                if hasattr(blob, 'detect_language'):
-                    return blob.detect_language()
-            except:
-                pass
+            # If langdetect fails, return None (TextBlob doesn't have detect_language)
             return None
         except Exception:
             return None
