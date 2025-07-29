@@ -21,7 +21,7 @@ args = "install_dependencies"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Run Web Scraper"
+args = "Web App"
 
 [[workflows.workflow]]
 name = "Web Scraper"
@@ -40,9 +40,14 @@ task = "shell.exec"
 args = "uv add requests beautifulsoup4 langdetect"
 
 [[workflows.workflow]]
-name = "Run Web Scraper"
+name = "Web App"
 author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python web_scraper.py"
+args = "python app.py"
+waitForPort = 5000
+
+[[ports]]
+localPort = 5000
+externalPort = 80

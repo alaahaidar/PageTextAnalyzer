@@ -2,7 +2,7 @@
 
 ## Overview
 
-This is a Python-based web scraping application that extracts visible text content from web pages and filters out Polish text content. The application identifies the language of text snippets and displays non-Polish text in an HTML table format. It's designed as a command-line tool that can either accept a URL as an argument or prompt the user for input.
+This is a Python-based web scraping application that extracts visible text content from web pages and filters out Polish text content. The application identifies the language of text snippets and displays non-Polish text in an HTML table format. It now features both a command-line interface and a modern web interface with URL input field and "Check" button for easy analysis.
 
 ## User Preferences
 
@@ -10,12 +10,15 @@ Preferred communication style: Simple, everyday language.
 
 ## System Architecture
 
-### Single-File Architecture
-The application follows a simple, monolithic architecture contained within a single Python file (`web_scraper.py`). This design choice prioritizes simplicity and ease of deployment over modularity, making it suitable for a focused, single-purpose tool.
+### Dual Interface Architecture
+The application now features two interfaces:
+1. **Command-line Interface** (`web_scraper.py`): Original single-file architecture for command-line usage
+2. **Web Interface** (`app.py` + `templates/index.html`): Flask-based web application with modern UI
 
 ### Core Components
 - **WebTextExtractor Class**: The main class that handles all web scraping and text processing functionality
-- **Command-line Interface**: Simple argument parsing and user interaction
+- **Command-line Interface**: Simple argument parsing and user interaction in `web_scraper.py`
+- **Web Application**: Flask server providing a user-friendly web interface with URL input field and "Check" button
 - **Text Processing Pipeline**: Sequential processing of HTML content through parsing, extraction, language detection, and filtering
 
 ## Key Components
