@@ -27,9 +27,12 @@ try:
     import requests
     from bs4 import BeautifulSoup, Comment
     from langdetect import detect, DetectorFactory, LangDetectException
+    from textblob import TextBlob
+    import os
+    from openai import OpenAI
 except ImportError as e:
     print(f"Error: Missing required library. Please install: {e.name}")
-    print("Install with: pip install requests beautifulsoup4 langdetect")
+    print("Install with: pip install requests beautifulsoup4 langdetect textblob openai")
     sys.exit(1)
 
 # Set seed for consistent language detection results
@@ -51,6 +54,32 @@ class WebTextExtractor:
     # Tags to completely ignore (non-visible content)
     IGNORED_TAGS = ['script', 'style', 'meta', 'link', 'noscript', 'template']
     
+    # Enhanced Polish detection patterns
+    POLISH_PATTERNS = {
+        # Common Polish words that appear frequently
+        'common_words': [
+            'aby', 'ale', 'albo', 'jako', 'oraz', 'tylko', 'także', 'bardzo', 
+            'można', 'należy', 'przez', 'gdzie', 'które', 'które', 'wszystkich',
+            'zostać', 'będzie', 'został', 'została', 'zostało', 'zostały',
+            'może', 'mogą', 'musi', 'musisz', 'powinien', 'powinna', 'powinno',
+            'więc', 'więcej', 'podczas', 'między', 'wiele', 'każdy', 'każda',
+            'jakie', 'jaki', 'jaka', 'tutaj', 'teraz', 'wtedy', 'nigdy',
+            'zawsze', 'często', 'czasem', 'czasami', 'dziś', 'dzisiaj'
+        ],
+        
+        # Polish-specific character combinations
+        'char_patterns': [
+            'ą', 'ć', 'ę', 'ł', 'ń', 'ó', 'ś', 'ź', 'ż',  # Polish diacritics
+            'cz', 'sz', 'rz', 'dz', 'dż', 'dź',  # Polish digraphs
+        ],
+        
+        # Common Polish endings
+        'endings': [
+            'ość', 'ość', 'anie', 'enie', 'owy', 'owa', 'owe', 'emy', 'ecie',
+            'ować', 'ąć', 'nąć', 'ić', 'yć', 'ych', 'ymi', 'ami', 'ach'
+        ]
+    }
+    
     def __init__(self, timeout: int = 30):
         """Initialize the extractor with request timeout."""
         self.timeout = timeout
@@ -58,6 +87,16 @@ class WebTextExtractor:
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         })
+        
+        # Initialize OpenAI client if API key is available
+        self.openai_client = None
+        openai_api_key = os.environ.get("OPENAI_API_KEY")
+        if openai_api_key:
+            try:
+                self.openai_client = OpenAI(api_key=openai_api_key)
+            except Exception as e:
+                print(f"Warning: Could not initialize OpenAI client: {e}")
+                self.openai_client = None
     
     def validate_url(self, url: str) -> bool:
         """Validate URL format."""
@@ -101,20 +140,118 @@ class WebTextExtractor:
         
         return text
     
+    def is_polish_text(self, text: str) -> bool:
+        """Enhanced Polish text detection using multiple strategies."""
+        if not text or len(text.strip()) < 5:
+            return False
+        
+        text_lower = text.lower()
+        words = text_lower.split()
+        
+        # Strategy 1: Check for Polish diacritics (strong indicator)
+        polish_chars = sum(1 for char in text if char in 'ąćęłńóśźż')
+        if polish_chars > 0:
+            # If we have Polish characters, likely Polish
+            if len(text) < 50:  # Short text with Polish chars is likely Polish
+                return True
+            elif polish_chars / len(text) > 0.02:  # More than 2% Polish chars
+                return True
+        
+        # Strategy 2: Check for common Polish words
+        polish_word_count = sum(1 for word in words if word in self.POLISH_PATTERNS['common_words'])
+        if len(words) > 0:
+            polish_word_ratio = polish_word_count / len(words)
+            if polish_word_ratio > 0.15:  # More than 15% Polish words
+                return True
+        
+        # Strategy 3: Check for Polish character combinations
+        polish_patterns = sum(1 for pattern in self.POLISH_PATTERNS['char_patterns'] 
+                             if pattern in text_lower)
+        if polish_patterns >= 2:  # Multiple Polish patterns found
+            return True
+        
+        # Strategy 4: Check for Polish word endings
+        polish_endings = sum(1 for word in words 
+                           for ending in self.POLISH_PATTERNS['endings'] 
+                           if word.endswith(ending))
+        if len(words) > 0 and polish_endings / len(words) > 0.1:
+            return True
+        
+        # Strategy 5: Use langdetect as backup, but be more strict
+        try:
+            if len(text.strip()) >= 15:  # Only for longer text
+                detected_lang = detect(text)
+                if detected_lang == 'pl':
+                    return True
+        except:
+            pass
+        
+        # Strategy 6: Use TextBlob as additional verification
+        try:
+            blob = TextBlob(text)
+            if hasattr(blob, 'detect_language'):
+                detected_lang = blob.detect_language()
+                if detected_lang == 'pl':
+                    return True
+        except:
+            pass
+        
+        # Strategy 7: Use OpenAI for the most accurate detection (for edge cases)
+        if self.openai_client and len(text.strip()) >= 20:
+            try:
+                response = self.openai_client.chat.completions.create(
+                    model="gpt-4o",  # the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are a language detection expert. Analyze the given text and determine if it's written in Polish. Respond with only 'YES' if the text is in Polish, or 'NO' if it's not in Polish. Be very accurate."
+                        },
+                        {
+                            "role": "user",
+                            "content": f"Is this text in Polish? Text: '{text}'"
+                        }
+                    ],
+                    max_tokens=10,
+                    temperature=0
+                )
+                
+                ai_response = response.choices[0].message.content.strip().upper()
+                if ai_response == 'YES':
+                    return True
+            except Exception as e:
+                # If OpenAI fails, continue with other methods
+                print(f"OpenAI detection failed: {e}")
+        
+        return False
+    
     def detect_language(self, text: str) -> Optional[str]:
-        """Detect language of text snippet."""
+        """Detect language of text snippet with enhanced Polish detection."""
         try:
             # Skip very short text for better accuracy
-            if len(text.strip()) < 10:
+            if len(text.strip()) < 5:
                 return None
             
-            detected_lang = detect(text)
-            return detected_lang
+            # First check if it's Polish using our enhanced detection
+            if self.is_polish_text(text):
+                return 'pl'
+            
+            # For non-Polish text, use langdetect
+            if len(text.strip()) >= 10:
+                detected_lang = detect(text)
+                return detected_lang
+            else:
+                return None
+                
         except LangDetectException:
-            # Language detection failed
+            # If langdetect fails, try TextBlob as backup
+            try:
+                blob = TextBlob(text)
+                if hasattr(blob, 'detect_language'):
+                    return blob.detect_language()
+            except:
+                pass
             return None
         except Exception:
-            # Any other error in language detection
             return None
     
     def extract_text_elements(self, soup: BeautifulSoup) -> List[Tuple[str, str]]:
@@ -334,7 +471,12 @@ class WebTextExtractor:
         
         # Filter non-Polish content
         print("Detecting languages and filtering non-Polish content...")
-        non_polish_elements = self.filter_non_polish(text_elements)
+        print("Using enhanced Polish detection with multiple strategies...")
+        if hasattr(self, 'openai_client') and self.openai_client:
+            print("OpenAI-powered detection available for maximum accuracy...")
+        non_polish_elements = self.filter_non_polish(text_elements) 
+        polish_filtered = len(text_elements) - len(non_polish_elements)
+        print(f"Filtered out {polish_filtered} Polish text snippets")
         print(f"Found {len(non_polish_elements)} non-Polish text snippets")
         
         # Generate HTML table
